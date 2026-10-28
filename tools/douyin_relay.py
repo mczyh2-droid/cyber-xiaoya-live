@@ -6,7 +6,7 @@ r"""douyin_relay.py —— 把本地抖音弹幕采集服务的消息，转发�
 ----
 抖音弹幕不能直接读（需要签名），社区通行做法是跑一个**本地采集服务**：
   · 上游开源项目: https://github.com/jwwsjlm/douyinLive （Go 写的，自带 ws + http）
-  · 默认监听 1089，配置见它自己的 config.yaml
+  · Mac 启动器指定监听 1089（上游原生默认 1088）
   · 房间弹幕流: ws://127.0.0.1:1089/ws/<房间号>
   · 房间状态:   http://127.0.0.1:1089/api/v1/rooms/<房间号>/status
 
@@ -55,7 +55,8 @@ def to_bridge_payload(msg: dict) -> dict | None:
         return {"nick": nick, "content": content, "text": content,
                 "platform": "抖音", "kind": ""}
 
-    if method in ("WebcastGiftMessage", "WebcastLightGiftMessage", "WebcastBindingGiftMessage"):
+    # v2.3.2 的 LightGift 没有发送者昵称，无法可靠点名，保留忽略。
+    if method in ("WebcastGiftMessage", "WebcastBindingGiftMessage"):
         inner = msg.get("msg") if method == "WebcastBindingGiftMessage" else msg
         if not isinstance(inner, dict) or not inner:
             return None
@@ -83,10 +84,10 @@ async def relay(room: str, ws_base: str, bridge: str, verbose: bool) -> None:
     url = f"{ws_base.rstrip('/')}/ws/{room}"
     push_url = f"{bridge.rstrip('/')}/api/danmaku"
     backoff = 3
-    async with httpx.AsyncClient(timeout=8.0) as cli:
+    async with httpx.AsyncClient(timeout=8.0, trust_env=False) as cli:
         while True:
             try:
-                async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+                async with websockets.connect(url, ping_interval=20, ping_timeout=20, proxy=None) as ws:
                     print(f"[relay] 已连接 {url}", flush=True)
                     backoff = 3
                     async for raw in ws:

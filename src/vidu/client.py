@@ -42,7 +42,10 @@ def _http() -> httpx.AsyncClient:
 
 
 def _headers() -> dict:
-    return {"Authorization": f"Token {CONF['api_key']}", "Content-Type": "application/json"}
+    key = str(CONF.get("api_key") or "").strip()
+    if not key:
+        raise RuntimeError("未配置 Vidu API Key，请先在设置中填写。")
+    return {"Authorization": f"Token {key}", "Content-Type": "application/json"}
 
 
 def _url(path: str) -> str:

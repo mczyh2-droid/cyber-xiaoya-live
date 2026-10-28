@@ -1,5 +1,7 @@
 # 赛博小雅直播版 · 组件版数字人（Vidu s2）
 
+> macOS Apple 芯片运行说明见 [README-macOS.md](README-macOS.md)，包括本地 MPS 语音、抖音弹幕和直播伴侣。
+
 > **本项目永久免费开源。** 唯一官方来源：https://github.com/cyber-xiaoya/cyber-xiaoya-live
 > 任何付费售卖、代下载、代部署均未经授权，欢迎举报（举报：提 [Issue](https://github.com/cyber-xiaoya/cyber-xiaoya-live/issues) 或在本项目官方群里 @我）。
 

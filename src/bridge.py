@@ -59,6 +59,8 @@ engine.on_action_fire = dm_router.note_manual
 # ── 弹幕→指令 自动触发路由(Stage B): T0本地匹配 / T2编译器 / 确认条 / Top10 ──
 async def _fetch_action_names() -> list[str]:
     """dm_router 的动态词表来源: 连线所带动作库(默认自建库)的全部动作名。"""
+    if not (appconf.load().get("vidu") or {}).get("api_key"):
+        return []
     _configure_vu()
     libs = await vu.list_action_libraries()
     items = libs.get("items") or []

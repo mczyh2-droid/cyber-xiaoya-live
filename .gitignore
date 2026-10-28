@@ -28,6 +28,7 @@ refs/*
 # ── 环境 ───────────────────────────────────────────────
 .venv/
 .venv-align/
+runtime/
 __pycache__/
 *.pyc
 *.pyo

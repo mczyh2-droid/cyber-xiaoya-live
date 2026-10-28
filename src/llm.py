@@ -175,7 +175,7 @@ class LLMClient:
             "messages": self._messages(user_text),
             "stream": True,
             "temperature": float(c.get("temperature", 0.7)),
-            "max_tokens": int(c.get("max_tokens", 300)),
+            "max_tokens": int(c.get("max_tokens") or 300),
         }
         # 思考模式开关(2026-10-10): 官方新模型(deepseek-flash)默认开思考且 effort=high,
         # 思维链会把小 max_tokens 吃光返回空 content → 弹幕短回复必须显式 disabled。
