@@ -66,6 +66,7 @@ for line in Path("requirements.txt").read_text(encoding="utf-8").splitlines():
 
 # 同时发现安装中断等情况下缺失的间接依赖。
 import fastapi, uvicorn, httpx, websockets, certifi, multipart, numpy, gradio_client
+from python_socks.async_.asyncio import Proxy
 PY
 then
     require_uv

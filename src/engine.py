@@ -273,16 +273,25 @@ class Engine:
         self.phase = "creating"
         self.error = ""
         self.ended = None
-        rec_cfg = (appconf.load().get("rtc") or {})
-        self.record = {"enabled": bool(rec_cfg.get("managed_recording")), "state": "idle",
-                       "live_id": "", "files": [], "error": "", "updated": time.time()}
+        # 清掉上一场的标识，创建超时不能拿旧 live_id 当作本次会话清理。
+        self.live_id = ""
+        self.sig = None
+        self.rtc = {}
+        self.started_at = 0.0
+        sig = None
+        create_pending = False
         try:
             conf = appconf.load()
+            rec_cfg = conf.get("rtc") or {}
+            self.record = {"enabled": bool(rec_cfg.get("managed_recording")), "state": "idle",
+                           "live_id": "", "files": [], "error": "", "updated": time.time()}
             vu.configure(conf.get("vidu") or {})
             body, extra = self._build_body(overrides)
             self.model = body.get("model", "")
             self.mode = extra["mode"]
+            create_pending = True
             resp = await vu.create_component(body)
+            create_pending = False
             live = resp.get("live") or {}
             self.live_id = str(live.get("id") or "")
             if not self.live_id:
@@ -299,10 +308,11 @@ class Engine:
             sig = signaling.ComponentSignaling(vconf.get("host", "api.vidu.cn"), self.live_id,
                                                vconf.get("ws_path", ""),
                                                api_key=vconf.get("api_key"))
+            self.sig = sig         # connect/conn_init 失败或取消也要能关闭本次 WS
             await sig.connect()
             self.tr_add("sys", "WS 已连接, 发送 conn_init…")
-            await sig.conn_init(retries=15, interval=2.0)
-            self.sig = sig
+            if not await sig.conn_init(retries=15, interval=2.0):
+                raise RuntimeError("conn_init 未完成，WS 已关闭")
             self.started_at = time.time()
             # 新会话: 参考图是**会话级**的, 上一场的挂载/回执全部作废
             self._prompt_mounted = []
@@ -343,17 +353,49 @@ class Engine:
                 self._speak_task = asyncio.create_task(self._safe_say_text(greeting))
             return {"live_id": self.live_id, "model": self.model, "mode": self.mode,
                     "rtc": self.rtc}
-        except Exception as e:  # noqa: BLE001
+        except (Exception, asyncio.CancelledError) as e:  # noqa: BLE001
             self.phase = "idle"
+            self.rtc = {}
             self.error = f"{type(e).__name__}: {e}"
             self.tr_add("sys", f"启动失败: {self.error}")
-            if self.sig:
-                try:
-                    await self.sig.close()
-                except Exception:
-                    pass
+            if self.sig is sig:
                 self.sig = None
+            had_ws = sig is not None and sig.ws is not None
+            if sig is not None:
+                # 单独任务避免请求取消中断清理；两步都有超时，不会无限等候。
+                cleanup = asyncio.create_task(self._cleanup_failed_start(sig))
+                while True:
+                    try:
+                        await asyncio.shield(cleanup)
+                        break
+                    except asyncio.CancelledError:
+                        if cleanup.cancelled():
+                            self.tr_add("sys", "启动失败后的 WS 清理任务被取消")
+                            break
+                        continue
+                    except Exception as cleanup_error:  # noqa: BLE001
+                        self.tr_add("sys", f"启动失败后的 WS 清理异常: {type(cleanup_error).__name__}: {cleanup_error}")
+                        break
+            if self.live_id and not had_ws:
+                self.tr_add("sys", "WS 未建立，无法发送挂断；云端会话结束状态未确认，请检查 Vidu 会话记录")
+            elif create_pending and not self.live_id and isinstance(
+                    e, (httpx.TransportError, TimeoutError, asyncio.CancelledError)):
+                self.tr_add("sys", "创建请求未返回会话 ID；云端创建结果未确认，请检查 Vidu 会话记录后再试")
             raise
+
+    async def _cleanup_failed_start(self, sig: signaling.ComponentSignaling) -> None:
+        """只清理此次启动持有的 WS，不重建会话、不触发 conn_init。"""
+        try:
+            if sig.ws is not None:
+                try:
+                    await asyncio.wait_for(sig.hangup("start_failed"), timeout=3.0)
+                except (Exception, asyncio.CancelledError) as e:  # noqa: BLE001
+                    self.tr_add("sys", f"启动失败后发送挂断未完成: {type(e).__name__}: {e}")
+        finally:
+            try:
+                await asyncio.wait_for(sig.close(), timeout=5.0)
+            except (Exception, asyncio.CancelledError) as e:  # noqa: BLE001
+                self.tr_add("sys", f"启动失败后关闭 WS 未完成: {type(e).__name__}: {e}")
 
     async def _pump(self) -> None:
         sig = self.sig

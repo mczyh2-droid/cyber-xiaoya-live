@@ -25,6 +25,12 @@
 
 `config.json` 会在首次启动时生成，不覆盖已有配置。大模型 `max_tokens` 应为正整数，样例设为 300。音色预设默认在 `assets/local/voices/mac-demo/design.json`，是设计生成的测试女声，未使用原作者的克隆音色或人物素材。
 
+### 使用火山方舟普通 API Key
+
+在舞台设置中，将 `base_url` 填为 `https://ark.cn-beijing.volces.com/api/v3`，`model` 填控制台已开通的 Model ID 或 Endpoint ID。例如 `doubao-seed-2-0-mini-260428` 支持此项目的 Chat API 和关闭深度思考；本地 `llm.thinking` 可设为 `disabled`。Key 的全模型授权不代替具体的模型名称。
+
+将 Key 保存到本地私有文本文件，再把文件的绝对路径填进“key 文件”；不要直接在该栏粘贴 Key。Coding Plan、Agent Plan 使用不同的地址和专属 Key，不要套用普通按量 API 配置。来源：[官方鉴权说明](https://console.volcengine.com/ark/region%3Acn-beijing/docs/base-url-and-authentication)、[官方模型列表](https://console.volcengine.com/ark/region%3Acn-beijing/docs/model-list)、[套餐接口说明](https://console.volcengine.com/ark/region%3Acn-beijing/docs/integrate-third-party-tools)。
+
 ## Mac 本地语音
 
 沿用原项目的 OmniVoice 接口，使用官方 PyTorch MPS 后端；音频编解码器由上游自动放在 CPU。独立环境在 `runtime/omnivoice/.venv`，与桥服务 `.venv` 分开。顶层安装版本固定为 `omnivoice==0.2.1`、`torch==2.8.0`、`torchaudio==2.8.0`。
@@ -45,7 +51,13 @@
 - `tools/verify_macos_support.py` 的三项离线验证通过，其中弹幕使用本地模拟采集器，将 WebSocket 消息转为桥 HTTP 请求；没有接入真实抖音房间。
 - 官方抖音直播伴侣已安装并启动到扫码登录页；弹幕采集器已下载、核对官方摘要并查看命令帮助，尚未启动真实采集。
 
-语音样本与测量记录保存在本机 `runtime/verification/`，不随 Git 提交。真实 Vidu 会话、LLM 回复、抖音采集、声音回传与推流尚未验证，需要自己的账号、形象和直播间。
+2026-10-30，补充真实账号接入验证：
+
+- 普通火山方舟 API Key 配合 `doubao-seed-2-0-mini-260428`，短句流式回复成功；本次首段文字约 2.65 秒、整句约 2.78 秒，仅代表这次请求。
+- 舞台页通过 managed ARTC 显示真实 Vidu 数字人画面，并完成一次聊天回复；本机 OmniVoice 合成并向 Vidu 发送了约 4.33 秒 PCM。测试自动挂断后，服务端返回结束状态、计费 48 秒、消耗 48 积分。
+- 修复系统 SOCKS 代理缺依赖导致的连接失败，以及初始化失败时遗漏关闭连接的问题；11 项启动清理 mock 测试通过。未建立 WS 时无法发送挂断，云端结束状态仍需另查。
+
+语音样本、测量记录与舞台截图保存在本机 `runtime/verification/`，不随 Git 提交。扬声器实际出声、抖音声音采集、真实弹幕和推流尚未确认，不能据此声称完整直播已经跑通。
 
 ## 本地文件与排错
 
@@ -53,6 +65,7 @@
 - `config.json`、`assets/local/`、`logs/`：同样不会被正常 Git 提交。密钥文件放在 `runtime/secrets/` 或使用 `.key` 扩展名。
 - `/api/health`、`/api/live/status` 可检查桥状态。没有账号时应处于 `idle`；这只能证明本地服务运行。
 - `logs/bridge.log`：桥日志；通过合并入口启动语音时查看 `logs/omnivoice.log`。
+- 系统使用 SOCKS 代理时，WebSocket 需要 `python-socks[asyncio]`。该依赖已加入安装清单；旧环境重新运行 Mac 启动器会自动补装。仅出现此错误不代表 Vidu Key 无效。
 - 已有配置若未选择测试音色，把 `tts.voices_dir` 指向自己的预设目录，`tts.voice` 填对应文件夹名，随后重载设置。
 
 缺 Vidu 账号/形象和大模型 Key 时，不算真实数字人对话跑通；缺抖音登录、房间号和开播权限时，不算真实弹幕和推流跑通。
